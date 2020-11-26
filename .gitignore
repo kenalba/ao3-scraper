@@ -1,2 +1,4 @@
 .idea/
 __pycache__/scraper.cpython-38.pyc
+/testing/
+.DS_Store

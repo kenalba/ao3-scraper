@@ -1,14 +1,19 @@
 from bs4 import BeautifulSoup
 import urllib.request
 
-# for whatever reason, ao3_api imports as AO3.
+# for whatever reason, ao3_api imports as AO3. Don't look at me.
 import AO3
+import csv
 
 TEST_URL = "https://archiveofourown.org/tags/Pride%20and%20Prejudice%20-%20Jane%20Austen/works?page=1"
 PAP_BASE_DIR_URL = "https://archiveofourown.org/tags/Pride%20and%20Prejudice%20-%20Jane%20Austen/"
+WORK_METADATA_FIELDS = ['authors', 'bookmarks', 'categories', 'characters', 'comments', 'date_published',
+						'date_updated', 'fandoms', 'hits', 'kudos', 'language', 'loaded', 'oneshot', 'rating',
+						'relationships', 'series', 'summary', 'tags', 'title', 'url', 'warnings', 'words', 'workid',
+						'filename']
 
 
-def test_main(base_dir_url):
+def get_full_work_dict(base_dir_url):
 	"""
 	This isn't actually ready to use - it's just where I'm keeping a note of the sequence these functions
 	should be used in order to initialize a corpus.
@@ -32,11 +37,13 @@ def test_main(base_dir_url):
 
 	work_dict = {}
 
-	# Create a dictionary of Work objects from the AO3 package.
+	# Create a dictionary of Work objects from the AO3 package for each story_id...
 	work_dict = create_work_dict(story_ids)
 
+	# Add the full raw texts...
 	work_dict = add_texts_to_work_dict(work_dict)
 
+	# And then we just need the exporting function, work_dict_to_files
 	return work_dict
 
 
@@ -46,14 +53,15 @@ def download_and_soupify(url, parser="html.parser"):
 	"""
 	response = urllib.request.urlopen(url)
 	directory_html = response.read()
-	index_soup = BeautifulSoup(directory_html, 'html.parser')
+	index_soup = BeautifulSoup(directory_html, parser)
 
 	return index_soup
 
 
 def get_directory_urls(index_soup):
 	"""
-	Given the base directory as soup, figure out how many pages there are, and return a list of the URLs of each directory page.
+	Given the base directory as soup, figure out how many pages there are,
+	and return a list of the URLs of each directory page.
 	"""
 
 	page_numbers = index_soup.find_all("ol", class_="pagination actions")
@@ -116,7 +124,7 @@ def create_work_dict(story_id_list):
 	for story_id in story_id_list:
 		work = AO3.Work(story_id)
 		work_dict[story_id] = {}
-		work_dict[story_id]['Work'] = work
+		work_dict[story_id]['work'] = work
 
 	return work_dict
 
@@ -143,7 +151,42 @@ def add_texts_to_work_dict(work_dict):
 	"""
 
 	for story_id in work_dict.keys():
-		work_string = get_fulltext_of_work(work_dict[story_id]['Work'])
+		work_string = get_fulltext_of_work(work_dict[story_id]['work'])
 		work_dict[story_id]['text'] = work_string
 
 	return work_dict
+
+
+def work_dict_to_files(destination_path, csv_name, work_dict):
+	"""
+	Takes in a path for files to live, a name for the csv file, and a work_dict (with texts!) to turn into
+	a folder of texts with a matching csv file.
+	"""
+	
+	csv_path = destination_path + csv_name + ".csv"
+	csv_file = open(csv_path, "w", encoding="utf-8", newline="")
+
+	writer = csv.DictWriter(csv_file, fieldnames=WORK_METADATA_FIELDS)
+	writer.writeheader()
+
+	for work_id in work_dict.keys():
+
+		work = work_dict[work_id]['work']
+		file_path = destination_path + str(work_id) + ".txt"
+		work_file = open(file_path, "w", encoding="utf-8")
+
+		work_file.write(work_dict[work_id]['text'])
+
+		meta_dict = {'authors': work.authors, 'bookmarks': work.bookmarks, 'categories': work.categories,
+					'characters': work.characters, 'comments': work.comments, 'date_published': work.date_published,
+					'date_updated': work.date_updated, 'fandoms': work.fandoms, 'hits': work.hits, 'kudos': work.kudos,
+					'language': work.language, 'loaded': work.loaded, 'oneshot': work.oneshot, 'rating': work.rating,
+					'relationships': work.relationships, 'series': work.series, 'summary': work.summary.strip("\n"),
+					'tags': work.tags, 'title': work.title, 'url': work.url, 'warnings': work.warnings,
+					'words': work.words, 'workid': work.workid, 'filename': str(work_id) + ".txt"}
+
+		writer.writerow(meta_dict)
+
+		work_file.close()
+
+	csv_file.close()
