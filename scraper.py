@@ -77,7 +77,6 @@ def get_all_story_ids(directory_urls):
 	for url in directory_urls:
 		all_story_ids += get_story_ids(url)
 
-	# We can also do this with a flatmap.
 	return all_story_ids
 
 
