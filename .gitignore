@@ -2,3 +2,7 @@
 __pycache__/scraper.cpython-38.pyc
 /testing/
 .DS_Store
+*.txt
+emma/emma.zip
+emma/emma_csv.csv
+story_ids_for_emma
