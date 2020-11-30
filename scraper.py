@@ -225,7 +225,7 @@ def add_texts_to_work_dict(work_dict, sleep_time=7):
 		print("Finished story", num, "/", number_of_stories)
 		num += 1
 
-	return work_dict
+	return texted_work_dict
 
 
 def work_dict_to_files(destination_path, csv_name, work_dict):
