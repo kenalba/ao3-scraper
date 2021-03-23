@@ -6,3 +6,6 @@ __pycache__/scraper.cpython-38.pyc
 emma/emma.zip
 emma/emma_csv.csv
 story_ids_for_emma
+emma/*
+output/*
+pickles/*
