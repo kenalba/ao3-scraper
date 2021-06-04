@@ -5,6 +5,7 @@ import urllib.request
 import AO3
 import csv
 from progress.bar import Bar
+from os import path, walk
 
 TEST_URL = "https://archiveofourown.org/tags/Pride%20and%20Prejudice%20-%20Jane%20Austen/works?page=1"
 PAP_BASE_DIR_URL = "https://archiveofourown.org/tags/Pride%20and%20Prejudice%20-%20Jane%20Austen/"
@@ -28,7 +29,7 @@ def download_and_soupify(url, parser="html.parser"):
 	return index_soup
 
 
-def get_directory_urls(index_soup):
+def get_directory_urls(index_soup, base_dir_url):
 	"""
 	Given the base directory as soup, figure out how many pages there are,
 	and return a list of the URLs of each directory page.
@@ -44,7 +45,7 @@ def get_directory_urls(index_soup):
 
 	number_of_pages = sorted_page_numbers[-1]
 
-	url_prefix = PAP_BASE_DIR_URL + "works?page="
+	url_prefix = base_dir_url + "works?page="
 	directory_urls = [(url_prefix + str(page_number)) for page_number in range(0, number_of_pages+1)]
 
 	return directory_urls
@@ -88,7 +89,7 @@ def get_story_urls(story_ids):
 
 	story_urls = []
 	for story_id in story_ids:
-		story_url = "https://archiveofourown.org/works/" + story_id + "?view_adult=true?view_full_work=true"
+		story_url = "https://archiveofourown.org/works/" + str(story_id) + "?view_adult=true?view_full_work=true"
 		story_urls.append(story_url)
 
 	return story_urls
@@ -196,12 +197,15 @@ def get_full_work_dict(base_dir_url):
 	# https://archiveofourown.org/tags/Pride%20and%20Prejudice%20-%20Jane%20Austen/works?page=1
 
 	directory_soup = download_and_soupify(base_dir_url)
-	directory_urls = get_directory_urls(directory_soup)
+	directory_urls = get_directory_urls(directory_soup, base_dir_url.replace("/works", ""))
 
 	# For right now, just grab the first page's worth of stories.
 	story_ids = get_story_ids(directory_urls[0])
 
+
 	work_dict = {}
+
+	# You can use the proxy function from rotator.py here instead.
 
 	# Create a dictionary of Work objects from the AO3 package for each story_id...
 	work_dict = create_work_dict(story_ids)
@@ -211,3 +215,41 @@ def get_full_work_dict(base_dir_url):
 
 	# And then we just need the exporting function, work_dict_to_files
 	return work_dict
+
+
+def create_csv(destination_path, csv_name):
+	"""
+	Takes in a path for files to live, a name for the csv file, and a work_dict (with texts!) to turn into
+	a folder of texts with a matching csv file.
+	"""
+
+	csv_path = destination_path + csv_name + ".csv"
+	csv_file = open(csv_path, "w", encoding="utf-8", newline="")
+
+	list_of_files = []
+
+	for root, dir, files in walk(destination_path, topdown=False):
+		list_of_files.append(files)
+
+	new_list_of_files = [file for file in list_of_files[0]]
+	metadata = {}
+
+	for file in new_list_of_files:
+		filename = file
+		try:
+			author = file.split("___")[0]
+			title = file.split("___")[1].split(".txt")[0]
+			metadata[filename] = {'author': author, 'filename': filename, "title": title}
+		except:
+			print(filename, " does not fit the pattern.")
+
+	writer = csv.DictWriter(csv_file, fieldnames=['author', 'title', 'filename'])
+	writer.writeheader()
+
+	for text in metadata:
+		file_path = destination_path + text
+
+		meta_dict = metadata[text]
+		writer.writerow(meta_dict)
+
+	csv_file.close()

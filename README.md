@@ -9,3 +9,6 @@ It's built on https://github.com/ArmindoFlores/ao3_api , which does a good job o
 It should turn a work_dictionary into a folder of text files with a nice, https://github.com/dhmit/gender_analysis - ready csv file.
 
 Warning: extremely hacked together, untested.
+
+
+Put your proxies in proxies.txt.
