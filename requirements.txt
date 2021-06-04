@@ -1,2 +1,4 @@
-bs4
+bs4~=0.0.1
 ao3_api
+
+beautifulsoup4~=4.9.3

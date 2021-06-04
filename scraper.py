@@ -70,6 +70,8 @@ def get_story_ids(directory_url):
 	work_hrefs = [link for link in dir_hrefs if "/works/" in link]
 	potential_ids = [work.split("/")[2] for work in work_hrefs]
 	id_list = [int(work_id) for work_id in potential_ids if work_id.isdigit()]
+	if len(id_list) > 20:
+		id_list = id_list[:20]
 
 	story_ids = list(set(id_list))
 
@@ -85,9 +87,10 @@ def get_all_story_ids(directory_urls, sleep_time=0):
 	# It doesn't trip up the limiter with up to 80 pages of stories. If it breaks on something higher, let me know.
 
 	all_story_ids = []
-	for url in directory_urls:
+	for new_url in directory_urls:
 		sleep(sleep_time)
-		all_story_ids += get_story_ids(url)
+		new_urls = get_story_ids(new_url)
+		all_story_ids += new_urls
 
 	return all_story_ids
 
@@ -126,6 +129,7 @@ def get_story_urls(story_ids):
 	"""
 
 	story_urls = []
+
 	for story_id in story_ids:
 		story_url = "https://archiveofourown.org/works/" + story_id + "?view_adult=true?view_full_work=true"
 		story_urls.append(story_url)
@@ -182,7 +186,7 @@ def create_work_dict_pickle(story_id_list, pickle_filename, sleep_time=6):
 	sleep_time is the time, in seconds, to wait between web requests if there are more than 60
 	story IDs. This stops the script from being rate limited. 7 seconds seems to work okay; it may
 	be possible to go faster.
-	
+
 	# This version preserves progress in a pickle file.
 	"""
 
@@ -203,7 +207,7 @@ def create_work_dict_pickle(story_id_list, pickle_filename, sleep_time=6):
 		sleep_time = 0
 
 	try:
-		for story_id in story_id_list[latest_story:]:
+		for story_id in story_id_list:
 			work = AO3.Work(story_id)
 			work_dict[story_id] = {}
 			work_dict[story_id]['work'] = work
@@ -211,10 +215,10 @@ def create_work_dict_pickle(story_id_list, pickle_filename, sleep_time=6):
 			sleep(sleep_time)
 
 			num += 1
-			print("Finished story", num, "/", number_of_stories)
+			print("Finished story", latest_story+num)
 			with open(pickle_filepath, "wb") as fp:
 				pickle.dump(work_dict, fp)
-	except urllib.error.HTTPError:
+	except:
 		print("HTTP error! Probably too many requests. Waiting 2 minutes and then trying again.")
 		sleep(120)
 		pass
@@ -371,7 +375,6 @@ def add_texts_to_work_dict_pickle(work_dict, pickle_filename, sleep_time=6):
 
 	return texted_work_dict
 
-
 def work_dict_to_files(destination_path, csv_name, work_dict):
 	"""
 	Takes in a path for files to live, a name for the csv file, and a work_dict (with texts!) to turn into
@@ -386,11 +389,16 @@ def work_dict_to_files(destination_path, csv_name, work_dict):
 
 	for work_id in work_dict.keys():
 
+		print("Writing " + str(work_id))
 		work = work_dict[work_id]['work']
 		file_path = destination_path + str(work_id) + ".txt"
 		work_file = open(file_path, "w", encoding="utf-8")
 
-		work_file.write(work_dict[work_id]['text'])
+		try:
+			work_file.write(work_dict[work_id]['text'])
+
+		except KeyError:
+			print(str(work_id) + " doesn't work.")
 
 		try:
 			meta_dict = {'authors': work.authors, 'bookmarks': work.bookmarks, 'categories': work.categories,
@@ -410,6 +418,27 @@ def work_dict_to_files(destination_path, csv_name, work_dict):
 	csv_file.close()
 
 
+def rate_limited_workdict_scraper(work_ids, pickle_filename, sleep_time = 0, incrementer = 60):
+
+	pickle_filepath = path.join("pickles", pickle_filename)
+	if path.exists(pickle_filepath):
+		with open(pickle_filepath, "rb") as fp:
+			work_dict = pickle.load(fp)
+	else:
+		work_dict = {}
+
+	num = 0
+
+	number_of_stories = len(work_ids)
+	latest_story = len(work_dict)
+	print("Starting at story number " + str(latest_story))
+	while latest_story <= number_of_stories:
+		latest_story = len(work_dict)
+		work_dict = create_work_dict_pickle(work_ids[latest_story:latest_story+incrementer], pickle_filename, sleep_time)
+		print("Grabbing stories " + str(latest_story) + " to " + str(latest_story+incrementer))
+		print("Waiting one minute before continuing.")
+		sleep(60)
+
 def get_full_work_dict(url):
 	"""
 	This isn't actually ready to use - it's just where I'm keeping a note of the sequence these functions
@@ -422,31 +451,47 @@ def get_full_work_dict(url):
 	"""
 
 	# Directory URL has to be the base URL for a given fandom. e.g.
-	# https://archiveofourown.org/tags/Pride%20and%20Prejudice%20-%20Jane%20Austen/works?page=1
-	fandom_id = url.split("/")[5]
+	# https://archiveofourown.org/tags/Pride%20and%20Prejudice%20-%20Jane%20Austen/
+	fandom_id = url.split("/")[4]
 	directory_soup = download_and_soupify(url)
 	directory_urls = get_directory_urls(url, directory_soup)
 
 	# This function will grab all of the story IDs. It'll take its time doing so and will store them in a pickle file
 	# in case it gets interrupted.
 
-	story_id_pickle_filename = fandom_id + "_storyIDs.pickle"
-	story_ids = get_all_story_ids_pickles(directory_urls, story_id_pickle_filename, sleep_time=7)
+	# story_id_pickle_filename = fandom_id + "_storyIDs.pickle"
+
+	# Note that this DOES NOT WORK with tags that aren't sorted by works.
+	story_ids = get_all_story_ids(directory_urls, sleep_time=7)
 
 	work_dict = {}
 
 	# Create a dictionary of Work objects from the AO3 package for each story_id...
-	work_dict_pickle_filename = fandom_id + "_works.pickle"
-	work_dict = create_work_dict_pickle(story_ids, work_dict_pickle_filename, sleep_time=7)
+	# work_dict_pickle_filename = fandom_id + "_works.pickle"
+	# work_dict = create_work_dict_pickle(story_ids, work_dict_pickle_filename, sleep_time=7)
+
+	# This function will grab all of the story IDs. It'll take its time doing so and will store them in a pickle file
+	# in case it gets interrupted.
+
+ 	# story_id_pickle_filename = fandom_id + "_storyIDs.pickle"
+
+	work_dict = {}
+
+	# Create a dictionary of Work objects from the AO3 package for each story_id...
+	# work_dict_pickle_filename = fandom_id + "_works.pickle"
+	# work_dict = create_work_dict_pickle(story_ids, work_dict_pickle_filename, sleep_time=7)
+
+	work_dict = create_work_dict(story_ids, sleep_time = 7)
+	work_dict_with_texts = add_texts_to_work_dict(work_dict, sleep_time = 7)
 
 	# Add the full raw texts...
-	work_dict = add_texts_to_work_dict(work_dict)
+	# work_dict = add_texts_to_work_dict(work_dict)
 
 	# And then we just need the exporting function, work_dict_to_files
-	output_path = path('output', fandom_id)
+	output_path = path.join('output', "")
 	csv_name = fandom_id
-	work_dict_to_files(output_path, csv_name, work_dict)
+	work_dict_to_files(output_path, csv_name, work_dict_with_texts)
 
-	print("Complete!)")
+	print("Complete!")
 
 	return work_dict
