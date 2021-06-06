@@ -1,14 +1,57 @@
 import requests
+import AO3
+import time
 from itertools import cycle
 from bs4 import BeautifulSoup
-import AO3
+from scraper import download_and_soupify, get_directory_urls
 
+"""
+Developer's Note
 
+This version of the scraper uses rotating proxies to get around AO3's rate limiting. As such, it's ethically dubious
+to use. 
+
+I suggest making a donation to AO3 any time you substantively stress their servers! That's what I do.
+
+"""
 def get_proxies(proxy_txt_filepath = "proxies.txt"):
+    """ Put at least 7 proxy IPs in proxies.txt. """
+
     with open(proxy_txt_filepath) as f:
         proxies = [line.strip() for line in f]
 
     return proxies
+
+
+def get_all_story_ids_proxy(directory_urls, proxies):
+    """ Gets all story ids, given the list of directory urls. Uses rotating proxies."""
+
+    start = time.time()
+    all_story_ids = []
+    proxy_pool = cycle(proxies)
+
+    for x in range(0, len(directory_urls)):
+
+        url = directory_urls[x]
+        print("Getting directory", x, "of", len(directory_urls))
+
+        proxy = next(proxy_pool)
+        req = requests.get(url, proxies={"http": proxy, "https": proxy})
+
+        dir_soup = BeautifulSoup(req.content, "html.parser")
+        dir_links = dir_soup.find_all("a", href=True)
+        dir_hrefs = [link.attrs['href'] for link in dir_links]
+        work_hrefs = [link for link in dir_hrefs if "/works/" in link]
+        potential_ids = [work.split("/")[2] for work in work_hrefs]
+        id_list = [int(work_id) for work_id in potential_ids if work_id.isdigit()]
+        story_ids = list(set(id_list))
+
+        all_story_ids += story_ids
+
+    end = time.time()
+    print("It took ", end-start, " seconds to download ", len(directory_urls), " indices. Est. Time for work-dict = ",(end-start)*20)
+
+    return all_story_ids
 
 
 def get_work_soup_from_url(url, proxy = None):
@@ -31,10 +74,10 @@ def create_work_dict_proxy(story_id_list, proxies):
 
     work_dict = {}
 
-
-    for story_id in story_id_list:
+    for x in range(0, len(story_id_list)):
+        story_id = story_id_list[x]
         story_url = "https://archiveofourown.org/works/" + str(story_id) + "?view_adult=true?view_full_work=true"
-        print("Downloading story ", story_id)
+        print("Starting story ", x, "of ", len(story_id_list))
         work = AO3.Work(story_id, load=False)
         work_soup = False
         while not work_soup:
@@ -69,5 +112,17 @@ def create_work_dict_proxy(story_id_list, proxies):
         paras_list = [para.text for para in paras]
         output_string = "\n".join(paras_list)
         work_dict[story_id]['text'] = output_string
+
+    return work_dict
+
+
+def pipeline(url, proxies):
+
+    directory_soup = download_and_soupify(url)
+    directory_urls = get_directory_urls(directory_soup, url.replace("works", ""))
+
+    story_ids = get_all_story_ids_proxy(directory_urls, proxies)
+
+    work_dict = create_work_dict_proxy(story_ids, proxies)
 
     return work_dict

@@ -197,7 +197,7 @@ def get_full_work_dict(base_dir_url):
 	# https://archiveofourown.org/tags/Pride%20and%20Prejudice%20-%20Jane%20Austen/works?page=1
 
 	directory_soup = download_and_soupify(base_dir_url)
-	directory_urls = get_directory_urls(directory_soup, base_dir_url.replace("/works", ""))
+	directory_urls = get_directory_urls(directory_soup, base_dir_url.replace("works", ""))
 
 	# For right now, just grab the first page's worth of stories.
 	story_ids = get_story_ids(directory_urls[0])
